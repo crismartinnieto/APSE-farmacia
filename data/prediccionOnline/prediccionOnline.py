@@ -11,12 +11,13 @@ from collections import namedtuple
 ########################################################
 
 # Cargamos los modelos y el labelEncoder
-with open('data/prediccionOnline/travelModel.pkl', 'rb') as f:
+with open('./model/travelModel.pkl', 'rb') as f:
     modelo_tiempo_viaje = pickle.load(f)
-with open('data/prediccionOnline/deliveryModel.pkl', 'rb') as f:
+with open('./model/deliveryModel.pkl', 'rb') as f:
     modelo_tiempo_entrega = pickle.load(f)
-with open('data/prediccionOnline/le.pkl', 'rb') as f:
+with open('./model/le.pkl', 'rb') as f:
     labelEncoder = pickle.load(f)
+
 
 vectores = {}
 
@@ -30,19 +31,59 @@ topic = client.topics['simulation']
 
 # Obtener el plan de la base de datos mongodb
 def obtenerPlan(evento):
+    # conectar a mongo
+    client = pymongo.MongoClient("mongodb://localhost:27017/")
+    db = client["simulator"]
+    col = db["plans"]
+    # Obtener el plan de la simulación
+    plan = col.find_one({"simulationId": evento["simulationId"]})
+
+    # Buscamos en plan["trucks"] el camión con truckId = evento.truckId
+    camion = list(filter(lambda truck: truck["truck_id"] == evento["truckId"], plan["trucks"]))[0]
+
+    # En este diccionario guardaremos toda la información del plan que sea necesaria para realizar las predicciones 
+    # ADAPTAR SEGUN EL VECTOR DE ENTRADA DEL MODELO DE PREDICCIÓN
+    vector = {
+        "tiemposEstimados": [ r["duration"] for r in camion["route"] ],
+        "vector": np.array([])
+    }
+    # Añadir la información del camión al diccionario de vectores
+    vectores[(evento["simulationId"],evento["truckId"])] = vector
+
+    # Cerrar la conexión
+    client.close()
     return
 
 def actualizarVectores(evento):
+        # Si el evento es de comienzo de viaje, añadimos el tiempo estimado de viaje al vector
+    if (evento["eventType"] in ["Truck departed", "Truck departed to depot"]):
+        vectores[(evento["simulationId"],evento["truckId"])]["vector"] = np.array(vectores[(evento["simulationId"],evento["truckId"])]["tiemposEstimados"].pop(0))
+
+    # Si el evento es de comienzo de entrega, añadimos el id del camión al vector
+    elif (evento["eventType"] == "Truck started delivering"):
+        vectores[(evento["simulationId"],evento["truckId"])]["vector"] = np.array(evento["truckId"])
     return
 
 def prediccionDeTiempoDeViaje(evento):
-    return
+    vector = vectores[(evento["simulationId"],evento["truckId"])]["vector"].reshape(-1, 1)
+    prediccion = modelo_tiempo_viaje.predict(vector)[0]
+     # LA PREDICCIÓN Y LO QUE SEA NECESARIO PARA SABER QUE ES SOBRE UN TIEMPO DE VIAJE
+    return prediccion
 
 def prediccionDeTiempoDeEntrega(evento):
-    return
+    vector = vectores[(evento["simulationId"],evento["truckId"])]["vector"].ravel()
+    # Codificar el id del camión
+    vector = labelEncoder.transform(vector)
+    prediccion = modelo_tiempo_entrega.predict(vector.reshape(-1, 1) )[0]
+
+    # LA PREDICCIÓN Y LO QUE SEA NECESARIO PARA SABER QUE ES SOBRE UN TIEMPO DE ENTREGA
+    return prediccion
 
 def escribirEnKafka(prediccion):
-    return
+    vector = vectores[(evento["simulationId"],evento["truckId"])]["vector"].reshape(-1, 1)
+    prediccion = modelo_tiempo_viaje.predict(vector)[0]
+    return prediccion # LA PREDICCIÓN Y LO QUE SEA NECESARIO PARA SABER QUE ES SOBRE UN TIEMPO DE VIAJE
+    
 
 ###########################################################
 # Bucle principal: consumir mensajes y hacer predicciones #

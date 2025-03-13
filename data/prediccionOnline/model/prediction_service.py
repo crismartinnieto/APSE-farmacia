@@ -6,13 +6,13 @@ import json
 app = Flask(__name__)
 
 # Load the trained scikit-learn models stored in pickle format
-with open('./../model/travelModel.pkl', 'rb') as f:
+with open('travelModel.pkl', 'rb') as f:
     modelo_tiempo_viaje = pickle.load(f)
 
-with open('./../model/deliveryModel.pkl', 'rb') as f:
+with open('deliveryModel.pkl', 'rb') as f:
     modelo_tiempo_entrega = pickle.load(f)
 
-with open('./../model/le.pkl', 'rb') as f:
+with open('le.pkl', 'rb') as f:
     labelEncoder = pickle.load(f)
 
 
@@ -44,12 +44,7 @@ def predict_delivery():
     input_features = np.array([truckId, time[0]]).reshape(1, -1)
     # Use the loaded model to make a prediction
     prediccion = modelo_tiempo_entrega.predict(input_features)[0]
-
-
-
-        
-
-
+    
     # Return the prediction as a JSON response  
     return jsonify({'prediction': prediccion[0]})
 
